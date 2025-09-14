@@ -18,8 +18,10 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
-func ExecCommands(ctx context.Context, clientset *kubernetes.Clientset, image string, commands [][]string, cfg *rest.Config, namespace string, stopper bool) ([]config.CmdResult, error) {
-	pod, err := CreatePrivilegedPod(ctx, clientset, image, namespace)
+func ExecCommands(ctx context.Context, clientset *kubernetes.Clientset, image string, commands [][]string, cfg *rest.Config, namespace string, stopper bool, privileged bool) ([]config.CmdResult, error) {
+	var pod *v1.Pod
+	var err error
+	pod, err = CreatePod(ctx, clientset, image, namespace, privileged)
 	if err != nil {
 		return nil, fmt.Errorf("create pod: %w", err)
 	}
@@ -58,61 +60,27 @@ func ExecCommands(ctx context.Context, clientset *kubernetes.Clientset, image st
 	return results, nil
 }
 
-func CreatePrivilegedPod(ctx context.Context, clientset *kubernetes.Clientset, img, ns string) (*v1.Pod, error) {
-	priv := true
-	hostPID := true
-	mountReadOnly := false
-
-	name := fmt.Sprintf("escape-test-%d", time.Now().Unix())
-
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"app": "escape-test",
-			},
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:    "tester",
-					Image:   img,
-					Command: []string{"/bin/sleep", "3600"},
-					SecurityContext: &v1.SecurityContext{
-						Privileged: &priv,
-						Capabilities: &v1.Capabilities{
-							Add: []v1.Capability{
-								v1.Capability("SYS_ADMIN"),
-								v1.Capability("NET_ADMIN"),
-								v1.Capability("SYS_PTRACE"),
-							},
-						},
-					},
-					VolumeMounts: []v1.VolumeMount{
-						{
-							Name:      "host-root",
-							MountPath: "/hostroot",
-							ReadOnly:  mountReadOnly,
-						},
-					},
-				},
-			},
-			RestartPolicy: v1.RestartPolicyNever,
-			HostPID:       hostPID,
-			Volumes: []v1.Volume{
-				{
-					Name: "host-root",
-					VolumeSource: v1.VolumeSource{
-						HostPath: &v1.HostPathVolumeSource{
-							Path: "/",
-							Type: newHostPathType(v1.HostPathDirectory),
-						},
-					},
-				},
-			},
-		},
+func CreatePod(ctx context.Context, clientset *kubernetes.Clientset, img, ns string, privileged bool) (*v1.Pod, error) {
+	var podSpec config.PodSpec
+	if privileged {
+		podSpec.Image = img
+		podSpec.Privileged = true
+		podSpec.HostPID = true
+		podSpec.HostPath = "/"
+		podSpec.Caps = []v1.Capability{v1.Capability("SYS_ADMIN"), v1.Capability("NET_ADMIN"), v1.Capability("SYS_PTRACE")}
+		podSpec.Command = []string{"/bin/sleep", "3600"}
+		podSpec.Labels = map[string]string{"app": "kube-privateer"}
+	} else {
+		podSpec.Image = img
+		podSpec.Privileged = false
+		podSpec.HostPID = false
+		podSpec.HostPath = ""
+		podSpec.Caps = nil
+		podSpec.Command = []string{"/bin/sleep", "3600"}
+		podSpec.Labels = map[string]string{"app": "kube-privateer"}
 	}
 
+	pod := config.NewPod(podSpec)
 	return clientset.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
 }
 

@@ -12,6 +12,17 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
+func init() {
+	rootCmd.AddCommand(rbacCmd)
+
+	rbacCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file (default KUBECONFIG or $HOME/.kube/config)")
+	rbacCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace for test pod")
+	rbacCmd.Flags().StringVarP(&image, "image", "i", "nicolaka/netshoot:latest", "image to use for test pod")
+	rbacCmd.Flags().DurationVarP(&timeout, "timeout", "t", 3*time.Minute, "overall timeout for the test")
+	rbacCmd.Flags().BoolVarP(&stopper, "stopper", "s", false, "waits for the user to press a key after each command is executed, allowing them to be executed step by step")
+	rbacCmd.Flags().BoolVar(&privileged, "privileged", false, "create privileged pod with (Privileged = true), (HostPID = true), (HostPath = '/hostroot'), (Caps = 'SYS_ADMIN', 'NET_ADMIN', 'SYS_PTRACE')")
+}
+
 var rbacCmd = &cobra.Command{
 	Use:   "rbac",
 	Short: "Run single rbac test (creates privileged pod, mounts host root, execs checks)",
@@ -32,7 +43,7 @@ var rbacCmd = &cobra.Command{
 			{"KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) curl -sSk -H \"Authorization: Bearer $KUBE_TOKEN\" https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/kube-system/secrets"},
 		}
 
-		results, err := app.ExecCommands(ctx, clientset, image, commands, cfg, namespace, stopper)
+		results, err := app.ExecCommands(ctx, clientset, image, commands, cfg, namespace, stopper, privileged)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -51,14 +62,4 @@ var rbacCmd = &cobra.Command{
 		fmt.Println(string(enc))
 		return nil
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(rbacCmd)
-
-	rbacCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig file (default KUBECONFIG or $HOME/.kube/config)")
-	rbacCmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "namespace for test pod")
-	rbacCmd.Flags().StringVarP(&image, "image", "i", "nicolaka/netshoot:latest", "image to use for test pod")
-	rbacCmd.Flags().DurationVarP(&timeout, "timeout", "t", 3*time.Minute, "overall timeout for the test")
-	rbacCmd.Flags().BoolVarP(&stopper, "stopper", "s", false, "waits for the user to press a key after each command is executed, allowing them to be executed step by step")
 }
